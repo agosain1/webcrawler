@@ -3,17 +3,18 @@ from crawler.frontier import Frontier
 from crawler.worker import Worker
 
 class Crawler(object):
-    def __init__(self, config, restart, stats, frontier_factory=Frontier, worker_factory=Worker):
+    def __init__(self, config, restart, stats, stopwords, frontier_factory=Frontier, worker_factory=Worker):
         self.config = config
         self.logger = get_logger("CRAWLER")
         self.frontier = frontier_factory(config, restart)
         self.workers = list()
         self.worker_factory = worker_factory
         self.stats = stats
+        self.stopwords = stopwords
 
     def start_async(self):
         self.workers = [
-            self.worker_factory(worker_id, self.config, self.frontier, self.stats)
+            self.worker_factory(worker_id, self.config, self.frontier, self.stats, self.stopwords)
             for worker_id in range(self.config.threads_count)]
         for worker in self.workers:
             worker.start()

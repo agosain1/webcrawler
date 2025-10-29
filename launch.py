@@ -16,10 +16,19 @@ class Stats:
         self.pages = set()
         self.longest_length = 0
         self.tokens = defaultdict(int)
-        self.subdomains = defaultdict(int)
+        self.subdomains = defaultdict(set)
 
     def __repr__(self):
         return f'<Stats:\n pages {self.pages}\n longest_length {self.longest_length}\n tokens {self.tokens}\n subdomains {self.subdomains}\n>'
+
+def _get_stop_words() -> set[str]:
+    stop_words = set()
+    with open('stopwords.txt', 'r') as f:
+        for line in f:
+            word = line.strip()
+            if word:
+                stop_words.add(word.lower())
+    return stop_words
 
 def main(config_file, restart):
     cparser = ConfigParser()
@@ -27,7 +36,8 @@ def main(config_file, restart):
     config = Config(cparser)
     config.cache_server = get_cache_server(config, restart)
     stats = Stats()
-    crawler = Crawler(config, restart, stats)
+    stopwords = _get_stop_words()
+    crawler = Crawler(config, restart, stats, stopwords)
     crawler.start()
 
 

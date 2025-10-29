@@ -1,9 +1,57 @@
 import re
 from urllib.parse import urlparse, urljoin, urldefrag
 from bs4 import BeautifulSoup
+from utils.tokenize import tokenize_text
+import json
+from datetime import datetime
 
-def scraper(url, resp, stats):
-    links = extract_next_links(url, resp, stats)
+def save_stats_log(stats, url):
+    log_entry = {
+        'pages': list(stats.pages),
+        'subdomains': {subdomain: list(pages) for subdomain, pages in stats.subdomains.items()},
+        'tokens': dict(stats.tokens),
+        'longest_page_words': stats.longest_length
+    }
+
+    with open('logs/Stats.log', 'w') as f:
+        json.dump(log_entry, f, indent=2)
+
+def scraper(url, resp, stats, stopwords):
+    if resp.status != 200:
+        return []
+
+    links = extract_next_links(url, resp)
+
+    soup = BeautifulSoup(resp.raw_response.content, 'lxml')
+    print(soup.prettify())
+
+    # Extract text content from HTML and tokenize (skipping stopwords)
+    text_content = soup.get_text(separator = ' ', strip = True)
+
+    # Count total words (including stopwords) for longest page tracking
+    words = text_content.split()
+    word_count = len([word for word in words if word])
+    if word_count > stats.longest_length:
+        stats.longest_length = word_count
+
+    # Tokenize and merge token frequencies into global stats (excluding stopwords)
+    tokens = tokenize_text(text_content, stopwords)
+    for token, count in tokens.items():
+        stats.tokens[token] += count
+
+    # Track subdomain for successfully crawled pages
+    parsed_url = urlparse(url)
+    if parsed_url.netloc.endswith('.uci.edu') or parsed_url.netloc == 'uci.edu':
+        subdomain = parsed_url.netloc
+        # Remove fragment from URL for unique page tracking
+        page_url = urldefrag(url)[0]
+
+        # Add this page to the subdomain's unique pages
+        stats.subdomains[subdomain].add(page_url)
+
+    # Save stats to log after processing this page
+    save_stats_log(stats, url)
+
     valid_links = []
     for link in links:
         if is_valid(link):
@@ -11,10 +59,9 @@ def scraper(url, resp, stats):
             # Remove fragment and add to stats.pages (set automatically handles uniqueness)
             url_without_fragment = urldefrag(link)[0]
             stats.pages.add(url_without_fragment)
-    print(stats)
     return valid_links
 
-def extract_next_links(url, resp, stats):
+def extract_next_links(url, resp):
     # Implementation required.
     # url: the URL that was used to get the page
     # resp.url: the actual url of the page
@@ -28,9 +75,15 @@ def extract_next_links(url, resp, stats):
     if resp.status != 200:
         return links
 
+    MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB in bytes
+    if resp.raw_response and resp.raw_response.content:
+        content_size = len(resp.raw_response.content)
+        if content_size > MAX_FILE_SIZE:
+            print(f"Skipping large file ({content_size / (1024*1024):.2f} MB): {url}")
+            return links
+
     try:
         soup = BeautifulSoup(resp.raw_response.content, 'lxml')
-        print(soup.prettify())
 
         for link in soup.find_all('a', href=True):
             href = link['href']
@@ -46,12 +99,14 @@ def is_valid(url):
     # Decide whether to crawl this url or not.
     # If you decide to crawl it, return True; otherwise return False.
     # There are already some conditions that return False.
+
+    # check if a right button goes on forever
     try:
         parsed = urlparse(url)
         if parsed.scheme not in set(["http", "https"]):
             return False
 
-        # Check if domain is one of the allowed domains
+        # allowed domains
         allowed_domains = ["ics.uci.edu", "cs.uci.edu", "informatics.uci.edu", "stat.uci.edu"]
         domain_valid = False
         for domain in allowed_domains:
@@ -60,6 +115,24 @@ def is_valid(url):
                 break
 
         if not domain_valid:
+            return False
+
+        # no queries
+        if parsed.query:
+            return False
+
+        # date avoiding
+        date_pattern_slash = r'/\d{4}/\d{1,2}(/\d{1,2})?'
+        if re.search(date_pattern_slash, parsed.path):
+            return False
+
+        date_pattern_hyphen = r'\d{4}-\d{1,2}(-\d{1,2})?'
+        if re.search(date_pattern_hyphen, parsed.path):
+            return False
+
+        # Patterns: /page/2, /p/3, /news/page/2, etc.
+        pagination_pattern = r'/(page|p)/\d+/?'
+        if re.search(pagination_pattern, parsed.path.lower()):
             return False
 
         return not re.match(
@@ -75,12 +148,3 @@ def is_valid(url):
     except TypeError:
         print ("TypeError for ", parsed)
         raise
-
-def _get_stop_words() -> set:
-    stop_words = set()
-    with open('stopwords.txt', 'r') as f:
-        for line in f:
-            word = line.strip()
-            if word:
-                stop_words.add(word.lower())
-    return stop_words
