@@ -1,11 +1,20 @@
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin, urldefrag
+from bs4 import BeautifulSoup
 
-def scraper(url, resp):
-    links = extract_next_links(url, resp)
-    return [link for link in links if is_valid(link)]
+def scraper(url, resp, stats):
+    links = extract_next_links(url, resp, stats)
+    valid_links = []
+    for link in links:
+        if is_valid(link):
+            valid_links.append(link)
+            # Remove fragment and add to stats.pages (set automatically handles uniqueness)
+            url_without_fragment = urldefrag(link)[0]
+            stats.pages.add(url_without_fragment)
+    print(stats)
+    return valid_links
 
-def extract_next_links(url, resp):
+def extract_next_links(url, resp, stats):
     # Implementation required.
     # url: the URL that was used to get the page
     # resp.url: the actual url of the page
@@ -15,16 +24,44 @@ def extract_next_links(url, resp):
     #         resp.raw_response.url: the url, again
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-    return list()
+    links = []
+    if resp.status != 200:
+        return links
+
+    try:
+        soup = BeautifulSoup(resp.raw_response.content, 'lxml')
+        print(soup.prettify())
+
+        for link in soup.find_all('a', href=True):
+            href = link['href']
+            absolute_url = urljoin(resp.url, href)
+            links.append(absolute_url)
+
+    except Exception as e:
+        print(f"Error parsing {url}: {e}")
+
+    return links
 
 def is_valid(url):
-    # Decide whether to crawl this url or not. 
+    # Decide whether to crawl this url or not.
     # If you decide to crawl it, return True; otherwise return False.
     # There are already some conditions that return False.
     try:
         parsed = urlparse(url)
         if parsed.scheme not in set(["http", "https"]):
             return False
+
+        # Check if domain is one of the allowed domains
+        allowed_domains = ["ics.uci.edu", "cs.uci.edu", "informatics.uci.edu", "stat.uci.edu"]
+        domain_valid = False
+        for domain in allowed_domains:
+            if parsed.netloc == domain or parsed.netloc.endswith("." + domain):
+                domain_valid = True
+                break
+
+        if not domain_valid:
+            return False
+
         return not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
             + r"|png|tiff?|mid|mp2|mp3|mp4"
@@ -38,3 +75,12 @@ def is_valid(url):
     except TypeError:
         print ("TypeError for ", parsed)
         raise
+
+def _get_stop_words() -> set:
+    stop_words = set()
+    with open('stopwords.txt', 'r') as f:
+        for line in f:
+            word = line.strip()
+            if word:
+                stop_words.add(word.lower())
+    return stop_words
