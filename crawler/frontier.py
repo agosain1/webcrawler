@@ -12,17 +12,26 @@ class Frontier(object):
         self.logger = get_logger("FRONTIER")
         self.config = config
         self.to_be_downloaded = list()
-        
-        if not os.path.exists(self.config.save_file) and not restart:
+
+        # Check for shelve file with .db extension (most common)
+        save_file_exists = os.path.exists(self.config.save_file + '.db') or os.path.exists(self.config.save_file)
+
+        if not save_file_exists and not restart:
             # Save file does not exist, but request to load save.
             self.logger.info(
                 f"Did not find save file {self.config.save_file}, "
                 f"starting from seed.")
-        elif os.path.exists(self.config.save_file) and restart:
+        elif save_file_exists and restart:
             # Save file does exists, but request to start from seed.
             self.logger.info(
                 f"Found save file {self.config.save_file}, deleting it.")
-            os.remove(self.config.save_file)
+            # Remove all shelve-related files
+            for ext in ['.db', '.dat', '.dir', '.bak', '']:
+                try:
+                    if os.path.exists(self.config.save_file + ext):
+                        os.remove(self.config.save_file + ext)
+                except:
+                    pass
         # Load existing save file, or create one if it does not exist.
         self.save = shelve.open(self.config.save_file)
         if restart:
@@ -31,7 +40,7 @@ class Frontier(object):
         else:
             # Set the frontier state with contents of save file.
             self._parse_save_file()
-            if not self.save:
+            if len(self.save) == 0:
                 for url in self.config.seed_urls:
                     self.add_url(url)
 
@@ -70,3 +79,8 @@ class Frontier(object):
 
         self.save[urlhash] = (url, True)
         self.save.sync()
+
+    def close(self):
+        """Close the shelve database to ensure all data is saved."""
+        self.save.close()
+        self.logger.info("Frontier shelve database closed successfully.")

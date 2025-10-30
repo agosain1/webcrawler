@@ -7,6 +7,7 @@ from datetime import datetime
 
 def save_stats_log(stats, url):
     log_entry = {
+        'pages_scraped': len(stats.pages),
         'pages': list(stats.pages),
         'subdomains': {subdomain: list(pages) for subdomain, pages in stats.subdomains.items()},
         'tokens': dict(stats.tokens),
@@ -23,7 +24,6 @@ def scraper(url, resp, stats, stopwords):
     links = extract_next_links(url, resp)
 
     soup = BeautifulSoup(resp.raw_response.content, 'lxml')
-    print(soup.prettify())
 
     # Extract text content from HTML and tokenize (skipping stopwords)
     text_content = soup.get_text(separator = ' ', strip = True)
@@ -54,7 +54,7 @@ def scraper(url, resp, stats, stopwords):
 
     valid_links = []
     for link in links:
-        if is_valid(link):
+        if is_valid(link, stats):
             valid_links.append(link)
             # Remove fragment and add to stats.pages (set automatically handles uniqueness)
             url_without_fragment = urldefrag(link)[0]
@@ -95,15 +95,22 @@ def extract_next_links(url, resp):
 
     return links
 
-def is_valid(url):
+def is_valid(url, stats=None):
     # Decide whether to crawl this url or not.
     # If you decide to crawl it, return True; otherwise return False.
     # There are already some conditions that return False.
 
-    # check if a right button goes on forever
     try:
         parsed = urlparse(url)
-        if parsed.scheme not in set(["http", "https"]):
+
+        # Skip if base URL (without query/fragment) was already crawled
+        # Only check duplicates if stats is provided
+        if stats:
+            base_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+            if base_url in stats.pages:
+                return False
+
+        if parsed.scheme not in {"http", "https"}:
             return False
 
         # allowed domains
@@ -115,10 +122,6 @@ def is_valid(url):
                 break
 
         if not domain_valid:
-            return False
-
-        # no queries
-        if parsed.query:
             return False
 
         # date avoiding

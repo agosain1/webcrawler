@@ -8,12 +8,13 @@ import time
 
 
 class Worker(Thread):
-    def __init__(self, worker_id, config, frontier, stats, stopwords):
+    def __init__(self, worker_id, config, frontier, stats, stopwords, crawler=None):
         self.logger = get_logger(f"Worker-{worker_id}", "Worker")
         self.config = config
         self.frontier = frontier
         self.stats = stats
         self.stopwords = stopwords
+        self.crawler = crawler
         # basic check for requests in scraper
         assert {getsource(scraper).find(req) for req in {"from requests import", "import requests"}} == {-1}, "Do not use requests in scraper.py"
         assert {getsource(scraper).find(req) for req in {"from urllib.request import", "import urllib.request"}} == {-1}, "Do not use urllib.request in scraper.py"
@@ -21,6 +22,11 @@ class Worker(Thread):
         
     def run(self):
         while True:
+            # Check for shutdown signal
+            if self.crawler and self.crawler.shutdown_flag:
+                self.logger.info("Shutdown signal received. Stopping worker.")
+                break
+
             tbd_url = self.frontier.get_tbd_url()
             if not tbd_url:
                 self.logger.info("Frontier is empty. Stopping Crawler.")
