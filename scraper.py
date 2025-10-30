@@ -5,6 +5,15 @@ from utils.tokenize import tokenize_text
 import json
 from datetime import datetime
 
+
+# Skip blocked domains and domain+path combinations
+blocked_domains = {"transformativeplay.ics.uci.edu", "tron.lom.ics.uci.edu",
+                   "san-tainer-1.lom.ics.uci.edu",
+                   "mt-live.ics.uci.edu", "fano.ics.uci.edu", "sli.ics.uci.edu",
+                   "sprout.ics.uci.edu",
+                   "checkmate.ics.uci.edu", "tippersweb.ics.uci.edu"}
+blocked_paths = {"ics.uci.edu/people/", "www.ics.uci.edu/~eppstein/gina/", "www.ics.uci.edu/~wjohnson/"}
+
 def save_stats_log(stats, url):
     log_entry = {
         'pages_scraped': len(stats.pages),
@@ -124,6 +133,25 @@ def is_valid(url, stats=None):
         if not domain_valid:
             return False
 
+        # Block entire domains
+        if parsed.netloc in blocked_domains:
+            return False
+
+        # Block specific domain+path combinations
+        for blocked in blocked_paths:
+            if '/' in blocked:
+                domain, path = blocked.split('/', 1)
+                if parsed.netloc == domain and parsed.path.startswith('/' + path):
+                    return False
+
+        # Skip paths with single dash segment (/-/)
+        if '/-/' in parsed.path:
+            return False
+        if '/activity' in parsed.path:
+            return False
+        if '/doku.php/' in parsed.path:
+            return False
+
         # date avoiding
         date_pattern_slash = r'/\d{4}/\d{1,2}(/\d{1,2})?'
         if re.search(date_pattern_slash, parsed.path):
@@ -165,6 +193,12 @@ def is_valid(url, stats=None):
         # Detect any URL with very long hexadecimal strings (likely identifiers/hashes)
         long_hex_pattern = r'/[a-f0-9]{32,}'
         if re.search(long_hex_pattern, parsed.path.lower()):
+            return False
+
+        # Skip image gallery paths
+        gallery_patterns = ['/pix/', '/photos/', '/gallery/', '/galleries/', '/images/', '/pics/']
+        path_lower = parsed.path.lower()
+        if any(pattern in path_lower for pattern in gallery_patterns):
             return False
 
         return not re.match(

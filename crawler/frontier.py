@@ -46,12 +46,27 @@ class Frontier(object):
 
     def _parse_save_file(self):
         ''' This function can be overridden for alternate saving techniques. '''
-        total_count = len(self.save)
+        total_count = 0
         tbd_count = 0
-        for url, completed in self.save.values():
-            if not completed and is_valid(url):
-                self.to_be_downloaded.append(url)
-                tbd_count += 1
+        corrupted_count = 0
+
+        # Iterate over keys to handle corrupted entries gracefully
+        for key in list(self.save.keys()):
+            try:
+                url, completed = self.save[key]
+                total_count += 1
+                if not completed and is_valid(url):
+                    self.to_be_downloaded.append(url)
+                    tbd_count += 1
+            except (KeyError, ValueError, EOFError) as e:
+                # Skip corrupted entries
+                corrupted_count += 1
+                self.logger.warning(f"Skipping corrupted entry with key {key}: {e}")
+                continue
+
+        if corrupted_count > 0:
+            self.logger.warning(f"Skipped {corrupted_count} corrupted entries from shelve")
+
         self.logger.info(
             f"Found {tbd_count} urls to be downloaded from {total_count} "
             f"total urls discovered.")
