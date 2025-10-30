@@ -40,4 +40,6 @@ class Crawler(object):
         self.frontier.close()
         # Save stats to disk
         self.stats.save()
+        # Save comprehensive final report
+        self.stats.save_final_report()
         self.logger.info("Crawler stopped. All data saved.")

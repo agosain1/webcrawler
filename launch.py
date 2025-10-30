@@ -12,9 +12,11 @@ multiprocessing.set_start_method('fork', force=True)
 from collections import defaultdict
 import pickle
 import os
+import json
 
 class Stats:
     SAVE_FILE = "stats.pkl"
+    FINAL_REPORT = "stats_report.json"
 
     def __init__(self):
         self.pages = set()
@@ -33,6 +35,51 @@ class Stats:
                 'tokens': dict(self.tokens),
                 'subdomains': {k: v for k, v in self.subdomains.items()}
             }, f)
+
+    def save_final_report(self):
+        """Save comprehensive final stats report"""
+        # Get top 100 most common tokens
+        sorted_tokens = sorted(self.tokens.items(), key=lambda x: x[1], reverse=True)[:100]
+
+        # Calculate subdomain statistics
+        subdomain_stats = {}
+        for subdomain, pages in self.subdomains.items():
+            subdomain_stats[subdomain] = {
+                'unique_pages': len(pages),
+                'pages': sorted(list(pages))
+            }
+
+        report = {
+            'summary': {
+                'total_unique_pages': len(self.pages),
+                'total_subdomains': len(self.subdomains),
+                'longest_page_words': self.longest_length,
+                'total_unique_tokens': len(self.tokens),
+                'total_token_occurrences': sum(self.tokens.values())
+            },
+            'subdomains': subdomain_stats,
+            'top_100_tokens': [{'token': token, 'count': count} for token, count in sorted_tokens],
+            'all_unique_pages': sorted(list(self.pages))
+        }
+
+        with open(self.FINAL_REPORT, 'w') as f:
+            json.dump(report, f, indent=2)
+
+        print(f"\n{'='*60}")
+        print(f"CRAWL COMPLETE - Final Statistics")
+        print(f"{'='*60}")
+        print(f"Total Unique Pages Crawled: {len(self.pages)}")
+        print(f"Total Unique Subdomains: {len(self.subdomains)}")
+        print(f"Longest Page (words): {self.longest_length}")
+        print(f"Total Unique Tokens: {len(self.tokens)}")
+        print(f"\nTop 10 Most Common Tokens:")
+        for i, (token, count) in enumerate(sorted_tokens[:10], 1):
+            print(f"  {i}. {token}: {count}")
+        print(f"\nSubdomains with Page Counts:")
+        for subdomain in sorted(self.subdomains.keys()):
+            print(f"  {subdomain}: {len(self.subdomains[subdomain])} pages")
+        print(f"\nFull report saved to: {self.FINAL_REPORT}")
+        print(f"{'='*60}\n")
 
     @staticmethod
     def load():

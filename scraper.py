@@ -17,9 +17,9 @@ blocked_paths = {"ics.uci.edu/people/", "www.ics.uci.edu/~eppstein/gina/", "www.
 def save_stats_log(stats, url):
     log_entry = {
         'pages_scraped': len(stats.pages),
-        'pages': list(stats.pages),
-        'subdomains': {subdomain: list(pages) for subdomain, pages in stats.subdomains.items()},
-        'tokens': dict(stats.tokens),
+        # 'pages': list(stats.pages),
+        # 'subdomains': {subdomain: list(pages) for subdomain, pages in stats.subdomains.items()},
+        # 'tokens': dict(stats.tokens),
         'longest_page_words': stats.longest_length
     }
 
