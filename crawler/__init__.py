@@ -38,4 +38,6 @@ class Crawler(object):
             worker.join()
         # Close the frontier to ensure shelve is saved
         self.frontier.close()
+        # Save stats to disk
+        self.stats.save()
         self.logger.info("Crawler stopped. All data saved.")

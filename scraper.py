@@ -138,6 +138,35 @@ def is_valid(url, stats=None):
         if re.search(pagination_pattern, parsed.path.lower()):
             return False
 
+        # Detect incrementing numbered files (e.g., r83.html, r84.html, paper123.html)
+        # Match patterns like: /r123.html, /paper456.php, /item789.aspx
+        numbered_file_pattern = r'/([a-z]+)(\d+)\.(html?|php|aspx?)$'
+        match = re.search(numbered_file_pattern, parsed.path.lower())
+        if match:
+            prefix = match.group(1)  # e.g., "r", "paper", "item"
+            number = int(match.group(2))  # e.g., 83, 456
+
+            # Skip if number is too high (likely a crawler trap)
+            # Allow up to 50 numbered items per pattern
+            if number > 50:
+                return False
+
+        # Detect Git repository paths with commit hashes (crawler traps)
+        # Examples: /tree/abc123..., /commit/def456..., /-/blob/789abc...
+        git_pattern = r'/(tree|commit|blob|raw)s?/[a-f0-9]{30,}'
+        if re.search(git_pattern, parsed.path.lower()):
+            return False
+
+        # Detect GitLab-style paths: /-/tree/hash, /-/commit/hash
+        gitlab_pattern = r'/-/(tree|commit|blob|raw)/[a-f0-9]{30,}'
+        if re.search(gitlab_pattern, parsed.path.lower()):
+            return False
+
+        # Detect any URL with very long hexadecimal strings (likely identifiers/hashes)
+        long_hex_pattern = r'/[a-f0-9]{32,}'
+        if re.search(long_hex_pattern, parsed.path.lower()):
+            return False
+
         return not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
             + r"|png|tiff?|mid|mp2|mp3|mp4"
