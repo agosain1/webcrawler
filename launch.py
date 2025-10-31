@@ -5,10 +5,6 @@ import multiprocessing
 from utils.server_registration import get_cache_server
 from utils.config import Config
 from crawler import Crawler
-
-# Fix for macOS pickling error with multiprocessing
-multiprocessing.set_start_method('fork', force=True)
-
 from collections import defaultdict
 import pickle
 import os
@@ -129,6 +125,14 @@ def main(config_file, restart):
 
 
 if __name__ == "__main__":
+    # Set multiprocessing start method before any other multiprocessing code
+    # Use 'fork' on macOS to avoid pickling issues with the spacetime library
+    try:
+        multiprocessing.set_start_method('fork', force=True)
+    except RuntimeError:
+        # Already set, ignore
+        pass
+
     parser = ArgumentParser()
     parser.add_argument("--restart", action="store_true", default=False)
     parser.add_argument("--config_file", type=str, default="config.ini")
