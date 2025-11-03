@@ -12,17 +12,26 @@ class Frontier(object):
         self.logger = get_logger("FRONTIER")
         self.config = config
         self.to_be_downloaded = list()
-        
-        if not os.path.exists(self.config.save_file) and not restart:
+
+        # Check for shelve file with .db extension (most common)
+        save_file_exists = os.path.exists(self.config.save_file + '.db') or os.path.exists(self.config.save_file)
+
+        if not save_file_exists and not restart:
             # Save file does not exist, but request to load save.
             self.logger.info(
                 f"Did not find save file {self.config.save_file}, "
                 f"starting from seed.")
-        elif os.path.exists(self.config.save_file) and restart:
+        elif save_file_exists and restart:
             # Save file does exists, but request to start from seed.
             self.logger.info(
                 f"Found save file {self.config.save_file}, deleting it.")
-            os.remove(self.config.save_file)
+            # Remove all shelve-related files
+            for ext in ['.db', '.dat', '.dir', '.bak', '']:
+                try:
+                    if os.path.exists(self.config.save_file + ext):
+                        os.remove(self.config.save_file + ext)
+                except:
+                    pass
         # Load existing save file, or create one if it does not exist.
         self.save = shelve.open(self.config.save_file)
         if restart:
@@ -31,18 +40,33 @@ class Frontier(object):
         else:
             # Set the frontier state with contents of save file.
             self._parse_save_file()
-            if not self.save:
+            if len(self.save) == 0:
                 for url in self.config.seed_urls:
                     self.add_url(url)
 
     def _parse_save_file(self):
         ''' This function can be overridden for alternate saving techniques. '''
-        total_count = len(self.save)
+        total_count = 0
         tbd_count = 0
-        for url, completed in self.save.values():
-            if not completed and is_valid(url):
-                self.to_be_downloaded.append(url)
-                tbd_count += 1
+        corrupted_count = 0
+
+        # Iterate over keys to handle corrupted entries gracefully
+        for key in list(self.save.keys()):
+            try:
+                url, completed = self.save[key]
+                total_count += 1
+                if not completed and is_valid(url):
+                    self.to_be_downloaded.append(url)
+                    tbd_count += 1
+            except (KeyError, ValueError, EOFError) as e:
+                # Skip corrupted entries
+                corrupted_count += 1
+                self.logger.warning(f"Skipping corrupted entry with key {key}: {e}")
+                continue
+
+        if corrupted_count > 0:
+            self.logger.warning(f"Skipped {corrupted_count} corrupted entries from shelve")
+
         self.logger.info(
             f"Found {tbd_count} urls to be downloaded from {total_count} "
             f"total urls discovered.")
@@ -70,3 +94,8 @@ class Frontier(object):
 
         self.save[urlhash] = (url, True)
         self.save.sync()
+
+    def close(self):
+        """Close the shelve database to ensure all data is saved."""
+        self.save.close()
+        self.logger.info("Frontier shelve database closed successfully.")
